@@ -29,7 +29,7 @@ class AppConfig:
     
     # File paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    MAZES_DIR = os.path.join(BASE_DIR, "..", "mazes")
+    MAZES_DIR = os.path.join(BASE_DIR, "mazes")
     ASSETS_DIR = os.path.join(BASE_DIR, "assets")
     
     # Frame configuration

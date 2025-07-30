@@ -1,0 +1,5 @@
+*.json
+*.png
+mazes/
+__pycache__/
+*.pyc

@@ -275,7 +275,7 @@ class MazeGenerator():
             return None
         
         # Save optimized image
-        self._save_maze_image(imgs_path, filename)
+        self.save_maze_image(imgs_path, filename)
         
         print("\n[SAVE] Maze saved successfully:")
         print(f"  📄 {json_file} (Data)")
@@ -284,7 +284,7 @@ class MazeGenerator():
 
         return filename
 
-    def _save_maze_image(self, folder_path, filename):
+    def save_maze_image(self, folder_path, filename):
         """Save optimized maze visualization as a 200x200 PNG image."""
         room_val = self._cell_values['ROOM']
         wall_val = self._cell_values['WALL']
