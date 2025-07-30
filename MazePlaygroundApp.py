@@ -8,7 +8,7 @@ from AppConfig import AppConfig
 from FrameManager import FrameManager
 from StyleManager import StyleManager
 from MainFrame import MainFrame
-
+from GenerateMazeFrame import GenerateMazeFrame
 class MazePlaygroundApp(tk.Tk):
     def __init__(self):
         """Initialize the main application."""
