@@ -10,6 +10,8 @@ from StyleManager import StyleManager
 from MainFrame import MainFrame
 from GenerateMazeFrame import GenerateMazeFrame
 from ViewMazesPage import ViewMazesPage
+from MazeGamePage import MazeGamePage
+
 class MazePlaygroundApp(tk.Tk):
     def __init__(self):
         """Initialize the main application."""
@@ -55,7 +57,7 @@ class MazePlaygroundApp(tk.Tk):
             "MainFrame": MainFrame,
             "MazeGenerator": GenerateMazeFrame,
             "ViewMazesPage": ViewMazesPage,
-            # "MazeGamePage": MazeGamePage
+            "MazeGamePage": MazeGamePage
         }
         
         for frame_name, frame_class in frame_classes.items():

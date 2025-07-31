@@ -18,7 +18,7 @@ class CellType(Enum):
     """Enumeration for maze cell types."""
     UNVISITED = -2
     WALL = -1
-    ROOM = 0
+    ROOM = 1
     VISITED = 2
     PLAYER = 3
     EXIT = 4
