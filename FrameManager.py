@@ -33,15 +33,13 @@ class FrameManager:
             self.current_frame = frame
             frame.pack(fill=tk.BOTH, expand=True)
             frame.tkraise()
-            
             # Call frame methods if they exist
             if hasattr(frame, 'on_show'):
                 frame.on_show(**kwargs)
             elif hasattr(frame, "refresh") and callable(getattr(frame, "refresh")):
                 frame.refresh()
             
-            if 'maze' in kwargs and hasattr(frame, "set_maze") and callable(getattr(frame, "set_maze")):
-                frame.set_maze(kwargs['maze'])
+           
             
             return True
         except Exception as e:

@@ -11,6 +11,7 @@ from MainFrame import MainFrame
 from GenerateMazeFrame import GenerateMazeFrame
 from ViewMazesPage import ViewMazesPage
 from MazeGamePage import MazeGamePage
+from MazeDpFrame import MazeDpFrame
 
 class MazePlaygroundApp(tk.Tk):
     def __init__(self):
@@ -50,6 +51,14 @@ class MazePlaygroundApp(tk.Tk):
         
         # Add separator
         ttk.Separator(nav_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=5)
+        
+        # DP Solver button
+        dp_btn = ttk.Button(
+            nav_frame,
+            text="🧠 DP Solver",
+            command=lambda: self.show_frame("MazeDpFrame")
+        )
+        dp_btn.pack(side=tk.LEFT, padx=(5, 0))
 
     def initialize_frames(self) -> None:
         """Initialize all application frames."""
@@ -57,7 +66,8 @@ class MazePlaygroundApp(tk.Tk):
             "MainFrame": MainFrame,
             "MazeGenerator": GenerateMazeFrame,
             "ViewMazesPage": ViewMazesPage,
-            "MazeGamePage": MazeGamePage
+            "MazeGamePage": MazeGamePage,
+            "MazeDpFrame": MazeDpFrame
         }
         
         for frame_name, frame_class in frame_classes.items():

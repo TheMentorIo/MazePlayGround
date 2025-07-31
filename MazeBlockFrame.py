@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import json
 import logging
+import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
 
@@ -27,6 +28,7 @@ class MazeBlockWidget:
     """
     
     THUMBNAIL_SIZE = (120, 120)  # Smaller for better performance
+    MAZE_DATA_NOT_AVAILABLE = "Maze data not available"
     
     def __init__(self, parent: tk.Widget, controller, image_path: str):
         """
@@ -172,6 +174,24 @@ class MazeBlockWidget:
             cursor="hand2"
         )
         play_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self._create_tooltip(play_btn, "Play maze game")
+        
+        # DP Solver button
+        dp_btn = tk.Button(
+            btn_frame,
+            text="🧠",
+            font=("Arial", 8),
+            width=3,
+            command=self._load_dp_solver,
+            bg="#9C27B0",
+            fg="white",
+            relief="flat",
+            cursor="hand2"
+        )
+        dp_btn.pack(side=tk.LEFT, padx=1)
+        
+        # Add tooltip for DP button
+        self._create_tooltip(dp_btn, "Load maze into DP Solver")
         
         # View button
         view_btn = tk.Button(
@@ -186,6 +206,7 @@ class MazeBlockWidget:
             cursor="hand2"
         )
         view_btn.pack(side=tk.LEFT, padx=1)
+        self._create_tooltip(view_btn, "View maze details")
         
         # Delete button
         delete_btn = tk.Button(
@@ -200,6 +221,7 @@ class MazeBlockWidget:
             cursor="hand2"
         )
         delete_btn.pack(side=tk.RIGHT)
+        self._create_tooltip(delete_btn, "Delete maze files")
 
     def _create_error_widget(self, parent: tk.Widget, error_msg: str) -> tk.Widget:
         """Create error display widget."""
@@ -214,7 +236,7 @@ class MazeBlockWidget:
         
         tk.Label(
             error_frame, 
-            text="Error", 
+            text=f"Error: {error_msg}", 
             font=("Arial", 9, "bold"),
             bg="#ffebee",
             fg="#c62828"
@@ -327,10 +349,39 @@ class MazeBlockWidget:
                 maze = maze_data.get("maze")
                 self.controller.show_frame("MazeGamePage", maze)
             else:
-                messagebox.showwarning("Warning", "Maze data not available")
+                messagebox.showwarning("Warning", self.MAZE_DATA_NOT_AVAILABLE)
         except Exception as e:
             logging.error(f"Error playing maze: {e}")
             messagebox.showerror("Error", f"Failed to play maze: {e}")
+
+    def _load_dp_solver(self) -> None:
+        """Load maze into DP solver and navigate to it."""
+        try:
+            maze_data = self._load_maze_data_lazy()
+            if maze_data:
+                maze = maze_data.get("maze")
+                if maze:
+                    # Convert list to numpy array for DP solver compatibility
+                    maze_array = np.array(maze)
+                    
+                    # Validate maze array
+                    if maze_array.size == 0:
+                        messagebox.showwarning("Warning", "Maze data is empty")
+                        return
+                    
+                    if len(maze_array.shape) != 2:
+                        messagebox.showwarning("Warning", "Invalid maze format - must be 2D array")
+                        return
+                    
+                    # Navigate to DP frame with the numpy array
+                    self.controller.show_frame("MazeDpFrame", maze_array)
+                else:
+                    messagebox.showwarning("Warning", "No maze data found in file")
+            else:
+                messagebox.showwarning("Warning", self.MAZE_DATA_NOT_AVAILABLE)
+        except Exception as e:
+            logging.error(f"Error loading maze into DP solver: {e}")
+            messagebox.showerror("Error", f"Failed to load maze into DP solver: {e}")
 
     def _view_details(self) -> None:
         """View detailed information about the maze."""
@@ -398,7 +449,7 @@ Size: {self._get_file_size()}
         """Get detailed maze information."""
         maze_data = self._load_maze_data_lazy()
         if not maze_data:
-            return "Maze data not available"
+            return self.MAZE_DATA_NOT_AVAILABLE
         
         try:
             maze = maze_data.get("maze", [])
@@ -418,6 +469,40 @@ Wall Cells: {wall_cells}
 Room Coverage: {(room_cells/total_cells*100):.1f}%"""
         except Exception as e:
             return f"Error reading maze data: {e}"
+
+    def _create_tooltip(self, widget, text):
+        """Create a simple tooltip for a widget."""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.configure(bg="black")
+            
+            label = tk.Label(
+                tooltip, 
+                text=text, 
+                bg="black", 
+                fg="white", 
+                font=("Arial", 8),
+                padx=4,
+                pady=2
+            )
+            label.pack()
+            
+            # Position tooltip near the widget
+            x = widget.winfo_rootx() + widget.winfo_width() // 2
+            y = widget.winfo_rooty() - 25
+            tooltip.geometry(f"+{x}+{y}")
+            
+            # Store tooltip reference to destroy it later
+            widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                delattr(widget, 'tooltip')
+        
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
 
 
 # Backward compatibility alias

@@ -8,16 +8,14 @@ from tkinter import ttk, messagebox
 import copy
 import logging
 import time
-from typing import Optional, Tuple, Dict, Any
+import numpy as np
+from typing import Optional, Tuple
 from enum import Enum
-
-try:
-    from MazeConfig import MazeConfig,CellType
-    from MazeGame import MazeGame
-    from AppConfig import AppConfig
-except ImportError as e:
-    logging.error(f"Failed to import required modules: {e}")
-
+from MazeConfig import CellType,Direction
+from MazeGame import MazeGame
+from AppConfig import AppConfig
+from GameArea import GameArea
+ 
 
 class GameState(Enum):
     """Enumeration for game states."""
@@ -30,29 +28,21 @@ class GameState(Enum):
 
 class MazeGamePage(ttk.Frame):
     """
-    Interactive maze game page.
+    Interactive maze game page optimized for GameArea integration.
     
     Features:
-    - Player movement with keyboard controls
+    - Player movement with keyboard controls via GameArea
     - Game state management
     - Score tracking and timer
-    - Multiple difficulty levels
-    - Save/load game functionality
-    - Visual feedback and animations
+    - GameArea integration for all visual aspects
+    - Clean separation of concerns
     """
     
-    # Game configuration constants
-    CELL_SIZE = 40
-    COLORS = {
-        "wall": "#2c3e50",
-        "room": "#ecf0f1", 
-        "player": "#3498db",
-        "exit": "#e74c3c",
-        "visited": "#bdc3c7",
-        "path": "#f39c12"
-    }
-    
-    # Game element values (should match mazeGame.py)
+    # Button text constants
+    PLAY_TEXT = "▶️ Play"
+    RESUME_TEXT = "▶️ Resume"
+    PAUSE_TEXT = "⏸️ Pause"
+    RESTART_TEXT = "🔄 Restart"
     
     def __init__(self, parent: tk.Widget, controller):
         """
@@ -79,7 +69,7 @@ class MazeGamePage(ttk.Frame):
         self.best_time = float('inf')
         
         # UI components
-        self.canvas: Optional[tk.Canvas] = None
+        self.game_area: Optional[GameArea] = None
         self.status_vars = {}
         
         # Initialize UI
@@ -87,7 +77,7 @@ class MazeGamePage(ttk.Frame):
         self._create_game_controls()
         self._create_game_area()
         self._create_status_bar()
-        self._setup_key_bindings()
+        self._setup_callbacks()
         
         logging.debug("MazeGamePage initialized successfully")
 
@@ -136,7 +126,7 @@ class MazeGamePage(ttk.Frame):
         
         self.play_btn = ttk.Button(
             primary_frame,
-            text="▶️ Play",
+            text=self.PLAY_TEXT,
             command=self._play_game,
             state="disabled"
         )
@@ -144,7 +134,7 @@ class MazeGamePage(ttk.Frame):
         
         self.pause_btn = ttk.Button(
             primary_frame,
-            text="⏸️ Pause",
+            text=self.PAUSE_TEXT,
             command=self._pause_game,
             state="disabled"
         )
@@ -152,7 +142,7 @@ class MazeGamePage(ttk.Frame):
         
         self.restart_btn = ttk.Button(
             primary_frame,
-            text="🔄 Restart",
+            text=self.RESTART_TEXT,
             command=self._restart_game,
             state="disabled"
         )
@@ -162,23 +152,19 @@ class MazeGamePage(ttk.Frame):
         secondary_frame = ttk.Frame(controls_frame)
         secondary_frame.pack(fill=tk.X)
         
-        ttk.Button(
-            secondary_frame,
-            text="💾 Save Game",
-            command=self._save_game
-        ).pack(side=tk.LEFT, padx=(0, 5))
+        # Game management buttons
+        game_mgmt_buttons = [
+            ("💾 Save Game", self._save_game),
+            ("📁 Load Game", self._load_game),
+            ("⚙️ Settings", self._show_settings)
+        ]
         
-        ttk.Button(
-            secondary_frame,
-            text="📁 Load Game",
-            command=self._load_game
-        ).pack(side=tk.LEFT, padx=(0, 5))
-        
-        ttk.Button(
-            secondary_frame,
-            text="⚙️ Settings",
-            command=self._show_settings
-        ).pack(side=tk.LEFT, padx=(0, 5))
+        for text, command in game_mgmt_buttons:
+            ttk.Button(
+                secondary_frame,
+                text=text,
+                command=command
+            ).pack(side=tk.LEFT, padx=(0, 5))
         
         # Debug button for testing
         ttk.Button(
@@ -188,39 +174,36 @@ class MazeGamePage(ttk.Frame):
         ).pack(side=tk.LEFT, padx=(0, 5))
 
     def _create_game_area(self) -> None:
-        """Create the main game canvas area."""
-        game_frame = ttk.LabelFrame(self, text="Game Area")
+        """Create the game area with GameArea canvas."""
+        game_frame = ttk.LabelFrame(self, text="Game Area", padding=5)
         game_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        # Create canvas with scrollbars
-        canvas_frame = ttk.Frame(game_frame)
-        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Canvas
-        self.canvas = tk.Canvas(
-            canvas_frame,
-            bg=self.COLORS["room"],
-            highlightthickness=1,
-            highlightbackground="gray"
+        # Create simplified GameArea
+        self.game_area = GameArea(
+            game_frame, 
+            width=800,
+            height=600
         )
         
-        # Scrollbars
-        v_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        h_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL, command=self.canvas.xview)
+        # Create scrollbars
+        v_scrollbar = ttk.Scrollbar(game_frame, orient=tk.VERTICAL, command=self.game_area.yview)
+        h_scrollbar = ttk.Scrollbar(game_frame, orient=tk.HORIZONTAL, command=self.game_area.xview)
         
-        self.canvas.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        self.game_area.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
         
         # Pack scrollbars and canvas
         v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.game_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    def _setup_callbacks(self) -> None:
+        """Setup callbacks for GameArea events."""
+        # Note: Simplified GameArea doesn't have callbacks
+        # Game logic will be handled directly in MazeGamePage
         
-        # Bind mouse events
-        self.canvas.bind("<Button-1>", self._on_canvas_click)
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        
-        # Initial empty state
-        self._show_empty_game_state()
+        # Setup keyboard bindings for player movement
+        self.bind("<Key>", self._on_key_press)
+        self.focus_set()
 
     def _create_status_bar(self) -> None:
         """Create status bar with game information."""
@@ -239,72 +222,68 @@ class MazeGamePage(ttk.Frame):
         stats_frame.pack(side=tk.LEFT)
         
         # Initialize status variables
-        self.status_vars = {
-            "state": tk.StringVar(value="No maze loaded"),
-            "time": tk.StringVar(value="Time: 00:00"),
-            "moves": tk.StringVar(value="Moves: 0"),
-            "score": tk.StringVar(value="Score: 0")
-        }
+        status_items = [
+            ("state", "No maze loaded"),
+            ("time", "Time: 00:00"),
+            ("moves", "Moves: 0"),
+            ("score", "Score: 0")
+        ]
+        
+        self.status_vars = {key: tk.StringVar(value=value) for key, value in status_items}
         
         # Create status labels
-        for i, (key, var) in enumerate(self.status_vars.items()):
-            label = ttk.Label(stats_frame, textvariable=var, font=("Arial", 9))
+        for i, (key, _) in enumerate(status_items):
+            label = ttk.Label(stats_frame, textvariable=self.status_vars[key], font=("Arial", 9))
             label.grid(row=0, column=i, padx=(0, 15), sticky="w")
         
         # Timer update
         self._update_timer()
 
-    def _setup_key_bindings(self) -> None:
-        """Setup keyboard bindings for player movement."""
-        # Bind to the main frame
-        self.bind_all("<Key>", self._on_key_press)
+    def _on_player_move(self, position: Tuple[int, int], direction: str) -> None:
+        """Handle player movement event from GameArea."""
+        if self.game_state == GameState.PLAYING:
+            self.moves_count += 1
+            self.score = max(0, self.score - 1)  # Decrease score with each move
+            
+            # Check if player reached exit
+            if self.maze_engine and self.maze_engine.game_over:
+                self._handle_game_won()
+    
+    def _on_key_press(self, event) -> None:
+        """Handle keyboard events for player movement."""
+        if self.game_state != GameState.PLAYING or not self.maze_engine:
+            return
         
-        # Also bind to canvas
-        self.canvas.bind("<Button-1>", self._on_canvas_click)
-        self.canvas.bind("<FocusIn>", lambda e: None)  # Enable focus
+        # Map keys to directions
+        key_direction_map = {
+            'Up': Direction.UP, 'Down': Direction.DOWN, 'Left': Direction.LEFT, 'Right': Direction.RIGHT,
+            'w': Direction.UP, 's': Direction.DOWN, 'a': Direction.LEFT, 'd': Direction.RIGHT
+        }
         
-        # Make canvas focusable
-        self.canvas.configure(takefocus=True)
-        
-        # Bind specific keys
-        movement_keys = ["<Up>", "<Down>", "<Left>", "<Right>", 
-                        "<w>", "<s>", "<a>", "<d>",
-                        "<W>", "<S>", "<A>", "<D>"]
-        
-        for key in movement_keys:
-            self.bind_all(key, self._on_key_press)
-            self.canvas.bind(key, self._on_key_press)
-
-    def _show_empty_game_state(self) -> None:
-        """Show empty state when no maze is loaded."""
-        self.canvas.delete("all")
-        
-        # Center text
-        text_x = 200
-        text_y = 150
-        
-        self.canvas.create_text(
-            text_x, text_y - 30,
-            text="🎯",
-            font=("Arial", 48),
-            fill="gray"
-        )
-        
-        self.canvas.create_text(
-            text_x, text_y,
-            text="No maze loaded",
-            font=("Arial", 14, "bold"),
-            fill="gray"
-        )
-        
-        self.canvas.create_text(
-            text_x, text_y + 25,
-            text="Load a maze from the View Mazes page\nor generate a new one",
-            font=("Arial", 10),
-            fill="gray"
-        )
-        
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        direction = key_direction_map.get(event.keysym)
+        if direction:
+            # Try to move player using maze engine
+            if self.maze_engine.move_player(direction):
+                # Update moves and score
+                self.moves_count += 1
+                self.score = max(0, self.score - 1)
+                
+                # Update the display
+                self.maze = self.maze_engine.maze
+                self._load_maze_to_game_area()
+                
+                # Check win condition
+                if self.maze_engine.game_over:
+                    self._handle_game_won()
+    
+    def _on_game_completed(self) -> None:
+        """Handle game completion event from GameArea."""
+        self._handle_game_won()
+    
+    def _on_cell_click(self, row: int, col: int) -> None:
+        """Handle cell click event from GameArea."""
+        print(f"Cell clicked: ({row}, {col})")
+        # Can add special click interactions here if needed
 
     def _play_game(self) -> None:
         """Start or resume the game."""
@@ -314,34 +293,12 @@ class MazeGamePage(ttk.Frame):
                 return
             
             if self.game_state == GameState.IDLE:
-                # Start new game
-                self.original_maze = copy.deepcopy(self.maze)
-                self.maze_engine = MazeGame(self.maze)
-                
-                # Generate player and exit
-                self.maze_engine.generate_player()
-                self.maze_engine.generate_exit()
-                
-                # Update our maze reference
-                self.maze = self.maze_engine.maze
-                
-                # Reset statistics
-                self.start_time = time.time()
-                self.moves_count = 0
-                self.score = 1000  # Starting score
-                
-                self.game_state = GameState.PLAYING
-                
+                self._start_new_game()
             elif self.game_state == GameState.PAUSED:
-                # Resume game
-                self.game_state = GameState.PLAYING
+                self._resume_game()
             
             self._update_ui_state()
-            self._draw_maze()
-            
-            # Ensure focus for key events
-            self.focus_set()
-            self.canvas.focus_set()
+            self._ensure_focus()
             
             print(f"Game started. State: {self.game_state}")
             
@@ -349,6 +306,83 @@ class MazeGamePage(ttk.Frame):
             logging.error(f"Error starting game: {e}")
             messagebox.showerror("Error", f"Failed to start game: {e}")
             print(f"Error starting game: {e}")
+    
+    def _start_new_game(self) -> None:
+        """Start a new game session."""
+        # Backup original maze
+        self.original_maze = copy.deepcopy(self.maze)
+        
+        # Initialize maze engine and generate positions
+        self._initialize_maze_engine()
+        
+        # Convert and load maze into GameArea
+        self._load_maze_to_game_area(include_entities=True)
+        
+        # Reset game statistics
+        self._reset_game_statistics()
+        
+        self.game_state = GameState.PLAYING
+    
+    def _load_maze_to_game_area(self, include_entities: bool = False) -> bool:
+        """
+        Consolidated method to load maze into GameArea.
+        
+        Args:
+            include_entities: Whether to include player and exit positions (not used in simplified GameArea)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.maze:
+            return False
+            
+        try:
+            maze_array = np.array(self.maze, dtype=int)
+            
+            # Simplified GameArea only needs the maze data
+            self.game_area.load_maze(maze_array)
+            
+            return True
+        except Exception as e:
+            logging.error(f"Error loading maze into GameArea: {e}")
+            return False
+
+    def _initialize_maze_engine(self) -> None:
+        """Initialize the maze engine and generate player/exit."""
+        self.maze_engine = MazeGame(self.maze)
+        self.maze_engine.generate_player()
+        self.maze_engine.generate_exit()
+        self.maze = self.maze_engine.maze
+
+    def _find_game_positions(self) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
+        """Find player and exit positions in the maze."""
+        player_pos = None
+        exit_pos = None
+        
+        for i in range(len(self.maze)):
+            for j in range(len(self.maze[i])):
+                if self.maze[i][j] == CellType.PLAYER.value:
+                    player_pos = (i, j)
+                elif self.maze[i][j] == CellType.EXIT.value:
+                    exit_pos = (i, j)
+        
+        return player_pos, exit_pos
+    
+    def _reset_game_statistics(self) -> None:
+        """Reset game statistics for new game."""
+        self.start_time = time.time()
+        self.moves_count = 0
+        self.score = 1000  # Starting score
+    
+    def _resume_game(self) -> None:
+        """Resume a paused game."""
+        self.game_state = GameState.PLAYING
+    
+    def _ensure_focus(self) -> None:
+        """Ensure proper focus for keyboard input."""
+        self.focus_set()
+        # Make sure this frame can receive keyboard events
+        self.configure(takefocus=True)
 
     def _pause_game(self) -> None:
         """Pause the current game."""
@@ -364,7 +398,10 @@ class MazeGamePage(ttk.Frame):
                 self.game_state = GameState.IDLE
                 self._reset_statistics()
                 self._update_ui_state()
-                self._draw_maze()
+                
+                # Reset GameArea to empty state
+                self.set_maze(self.maze)
+                self._load_maze_to_game_area()
             
         except Exception as e:
             logging.error(f"Error restarting game: {e}")
@@ -378,183 +415,51 @@ class MazeGamePage(ttk.Frame):
 
     def _update_ui_state(self) -> None:
         """Update UI elements based on current game state."""
-        if self.game_state == GameState.IDLE:
-            self.play_btn.configure(state="normal" if self.maze else "disabled")
-            self.pause_btn.configure(state="disabled")
-            self.restart_btn.configure(state="disabled")
-            self.status_vars["state"].set("Ready to play")
-            
-        elif self.game_state == GameState.PLAYING:
-            self.play_btn.configure(state="disabled")
-            self.pause_btn.configure(state="normal")
-            self.restart_btn.configure(state="normal")
-            self.status_vars["state"].set("Playing...")
-            
-        elif self.game_state == GameState.PAUSED:
-            self.play_btn.configure(state="normal", text="▶️ Resume")
-            self.pause_btn.configure(state="disabled")
-            self.restart_btn.configure(state="normal")
-            self.status_vars["state"].set("Paused")
-            
-        elif self.game_state == GameState.WON:
-            self.play_btn.configure(state="disabled")
-            self.pause_btn.configure(state="disabled")
-            self.restart_btn.configure(state="normal")
-            self.status_vars["state"].set("Congratulations! You won!")
-            
-        # Reset play button text if not paused
-        if self.game_state != GameState.PAUSED:
-            self.play_btn.configure(text="▶️ Play")
-
-    def _draw_maze(self) -> None:
-        """Draw the maze on the canvas."""
-        if not self.maze:
-            self._show_empty_game_state()
-            return
-        
-        try:
-            self.canvas.delete("all")
-            
-            rows = len(self.maze)
-            cols = len(self.maze[0]) if rows > 0 else 0
-            
-            for i in range(rows):
-                for j in range(cols):
-                    x1 = j * self.CELL_SIZE
-                    y1 = i * self.CELL_SIZE
-                    x2 = x1 + self.CELL_SIZE
-                    y2 = y1 + self.CELL_SIZE
-                    
-                    # Determine cell color
-                    cell_value = self.maze[i][j]
-                    fill_color = self._get_cell_color(cell_value)
-                    
-                    # Draw cell
-                    self.canvas.create_rectangle(
-                        x1, y1, x2, y2,
-                        fill=fill_color,
-                        outline="gray",
-                        width=1
-                    )
-                    
-                    # Add special symbols for player and exit
-                    if cell_value == CellType.PLAYER.value:
-                        self._draw_player(x1, y1)
-                    elif cell_value == CellType.EXIT.value:
-                        self._draw_exit(x1, y1)
-            
-            # Update scroll region
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            
-        except Exception as e:
-            logging.error(f"Error drawing maze: {e}")
-
-    def _get_cell_color(self, cell_value: int) -> str:
-        """
-        Get color for a cell based on its value.
-        
-        Args:
-            cell_value: Cell value from maze
-            
-        Returns:
-            Color string
-        """
-        color_map = {
-            CellType.WALL.value: self.COLORS["wall"],
-            CellType.ROOM.value: self.COLORS["room"],
-            CellType.PLAYER.value: self.COLORS["player"],
-            CellType.EXIT.value: self.COLORS["exit"],
-            CellType.VISITED.value: self.COLORS["visited"],
-        }
-        return color_map.get(cell_value, self.COLORS["wall"])
-
-    def _draw_player(self, x: int, y: int) -> None:
-        """Draw player symbol."""
-        center_x = x + self.CELL_SIZE // 2
-        center_y = y + self.CELL_SIZE // 2
-        radius = self.CELL_SIZE // 3
-        
-        self.canvas.create_oval(
-            center_x - radius, center_y - radius,
-            center_x + radius, center_y + radius,
-            fill=self.COLORS["player"],
-            outline="white",
-            width=2
-        )
-        
-        # Add player symbol
-        self.canvas.create_text(
-            center_x, center_y,
-            text="😊",
-            font=("Arial", 12)
-        )
-
-    def _draw_exit(self, x: int, y: int) -> None:
-        """Draw exit symbol."""
-        center_x = x + self.CELL_SIZE // 2
-        center_y = y + self.CELL_SIZE // 2
-        
-        self.canvas.create_text(
-            center_x, center_y,
-            text="🏁",
-            font=("Arial", 16)
-        )
-
-    def _on_key_press(self, event):
-        """Handle key press events for player movement."""
-        if self.game_state != GameState.PLAYING or not self.maze_engine:
-            return
-        
-        # Map keys to movement characters expected by mazeGame
-        key_to_move = {
-            "Up": "w",
-            "Down": "s", 
-            "Left": "a",
-            "Right": "d",
-            "w": "w",
-            "s": "s", 
-            "a": "a",
-            "d": "d",
-            "W": "w",
-            "S": "s",
-            "A": "a", 
-            "D": "d"
+        # Define state configurations
+        state_configs = {
+            GameState.IDLE: {
+                "play_btn": ("normal" if self.maze else "disabled", self.PLAY_TEXT),
+                "pause_btn": "disabled",
+                "restart_btn": "disabled",
+                "status": "Ready to play"
+            },
+            GameState.PLAYING: {
+                "play_btn": ("disabled", self.PLAY_TEXT),
+                "pause_btn": "normal",
+                "restart_btn": "normal",
+                "status": "Playing..."
+            },
+            GameState.PAUSED: {
+                "play_btn": ("normal", self.RESUME_TEXT),
+                "pause_btn": "disabled",
+                "restart_btn": "normal",
+                "status": "Paused"
+            },
+            GameState.WON: {
+                "play_btn": ("disabled", self.PLAY_TEXT),
+                "pause_btn": "disabled",
+                "restart_btn": "normal",
+                "status": "Congratulations! You won!"
+            }
         }
         
-        move_char = key_to_move.get(event.keysym)
-        if move_char:
-            try:
-                # Print debug info
-                print(f"Key pressed: {event.keysym}, mapped to: {move_char}")
-                
-                moved = self.maze_engine.move_player(move_char)
-                print(f"Player moved: {moved}")
-                
-                if moved:
-                    self.moves_count += 1
-                    self.score = max(0, self.score - 1)  # Decrease score with each move
-                    
-                    # Update the maze with new positions
-                    self.maze = self.maze_engine.maze
-                    
-                    # Check if player reached exit
-                    if hasattr(self.maze_engine, 'game_won') and self.maze_engine.game_won:
-                        self._handle_game_won()
-                    else:
-                        self._draw_maze()
-                
-            except Exception as e:
-                logging.error(f"Error moving player: {e}")
-                print(f"Error moving player: {e}")
+        config = state_configs.get(self.game_state)
+        if config:
+            # Update buttons
+            play_state, play_text = config["play_btn"]
+            self.play_btn.configure(state=play_state, text=play_text)
+            self.pause_btn.configure(state=config["pause_btn"])
+            self.restart_btn.configure(state=config["restart_btn"])
             
-            # Return "break" only for handled keys to prevent event propagation
-            return "break"
+            # Update status
+            self.status_vars["state"].set(config["status"])
 
     def _handle_game_won(self) -> None:
         """Handle game completion."""
         self.game_state = GameState.WON
         
         # Calculate time bonus
+        time_taken = 0
         if self.start_time:
             time_taken = time.time() - self.start_time
             time_bonus = max(0, 500 - int(time_taken))
@@ -565,7 +470,6 @@ class MazeGamePage(ttk.Frame):
                 self.best_time = time_taken
         
         self._update_ui_state()
-        self._draw_maze()
         
         # Show congratulations
         messagebox.showinfo(
@@ -575,22 +479,6 @@ class MazeGamePage(ttk.Frame):
             f"Time: {self._format_time(time_taken)}\n"
             f"Score: {self.score}"
         )
-
-    def _on_canvas_click(self, event) -> None:
-        """Handle canvas click events."""
-        # Set focus to enable keyboard input
-        self.focus_set()
-        self.canvas.focus_set()
-        
-        # Update focus indicator
-        if hasattr(self, 'focus_indicator'):
-            self.focus_indicator.config(text="Controls active", foreground="green")
-            
-        print("Canvas clicked, focus set for keyboard input")
-
-    def _on_mousewheel(self, event) -> None:
-        """Handle mouse wheel scrolling."""
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _update_timer(self) -> None:
         """Update the timer display."""
@@ -635,18 +523,17 @@ class MazeGamePage(ttk.Frame):
         """Test move functionality for debugging."""
         if self.game_state == GameState.PLAYING and self.maze_engine:
             try:
-                # Try moving down
-                moved = self.maze_engine.move_player("s")
-                print(f"Test move result: {moved}")
-                if moved:
-                    self.moves_count += 1
+                # Try moving down using maze engine
+                success = self.maze_engine.move_player('down')
+                if success:
+                    # Update display
                     self.maze = self.maze_engine.maze
-                    self._draw_maze()
-                    messagebox.showinfo("Test", "Move successful!")
+                    self._load_maze_to_game_area()
+                    messagebox.showinfo("Test", "Moved player down successfully!")
                 else:
-                    messagebox.showinfo("Test", "Move blocked")
+                    messagebox.showinfo("Test", "Could not move player down (blocked)")
             except Exception as e:
-                messagebox.showerror("Test Error", f"Error: {e}")
+                messagebox.showerror("Test Error", f"Error during test move: {e}")
         else:
             messagebox.showwarning("Test", "Game not running or engine not available")
 
@@ -663,18 +550,20 @@ class MazeGamePage(ttk.Frame):
             self.game_state = GameState.IDLE
             self._reset_statistics()
             self._update_ui_state()
-            self._draw_maze()
+            
+            # Show empty state in GameArea if no maze
+            if not self.maze:
+                self.game_area.show_empty_state()
             
             logging.info("Maze set successfully")
-            
         except Exception as e:
             logging.error(f"Error setting maze: {e}")
             messagebox.showerror("Error", f"Failed to load maze: {e}")
 
     def refresh(self) -> None:
         """Refresh the game page."""
-        if self.maze:
-            self._draw_maze()
+        # GameArea handles its own refresh, just ensure UI state is correct
+        self._update_ui_state()
 
     def on_show(self, **kwargs) -> None:
         """
@@ -686,6 +575,10 @@ class MazeGamePage(ttk.Frame):
         if 'maze' in kwargs:
             self.set_maze(kwargs['maze'])
         
+        # Load maze into game_area for rendering if maze exists
+        if self.maze is not None:
+            self._load_maze_to_game_area(include_entities=False)
+        
         # Ensure focus for key events
         self.after(100, self._set_focus)
         
@@ -694,11 +587,16 @@ class MazeGamePage(ttk.Frame):
     def _set_focus(self) -> None:
         """Set focus to enable keyboard input."""
         self.focus_set()
-        self.canvas.focus_set()
+        # Make sure this frame can receive keyboard events
+        self.configure(takefocus=True)
         
         # Update focus indicator
         if hasattr(self, 'focus_indicator'):
             self.focus_indicator.config(text="Controls active", foreground="green")
             
         print("Focus set for MazeGamePage")
+
+    def on_maze_completed(self) -> None:
+        """Called by GameArea when maze is completed."""
+        self._handle_game_won()
 
